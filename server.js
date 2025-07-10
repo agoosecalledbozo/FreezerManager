@@ -14,7 +14,7 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 3000;
 
-const upload = multer({ dest: '/tmp/uploads/' }); // Use /tmp for uploads
+const upload = multer({ dest: '/tmp/uploads/' });
 app.use(express.json());
 app.use(express.static('public'));
 const SQLiteStore = require('connect-sqlite3')(session);
@@ -23,7 +23,22 @@ app.use(session({
   store: new SQLiteStore({
     db: 'sessions.db',
     dir: path.join('/app/.data'),
-    concurrentDB: true
+    concurrentDB: true,
+    table: 'sessions',
+    init: (db) => {
+      try {
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS sessions (
+            sid TEXT PRIMARY KEY,
+            expires INTEGER,
+            data TEXT
+          )
+        `);
+        console.log('Session store initialized successfully');
+      } catch (error) {
+        console.error('Failed to initialize session store:', error.message);
+      }
+    }
   }),
   secret: process.env.SESSION_SECRET || 'your-secret-key',
   resave: false,
@@ -62,7 +77,7 @@ function initializeDatabase() {
       console.log(`Created directory: ${dataDir}`);
     }
 
-    db = new Database(dbPath);
+    db = new Database(dbPath, { fileMustExist: false });
     console.log('Database connection established');
 
     const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
@@ -784,6 +799,31 @@ app.post('/update-nickname', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Update nickname error:', error.message);
     res.status(500).json({ error: '更新暱稱失敗：' + error.message });
+  }
+});
+
+app.get('/download-db', requireAuth, (req, res) => {
+  const dbFile = path.join('/app/.data', 'freezer.db');
+  res.download(dbFile, 'freezer.db', (err) => {
+    if (err) {
+      console.error('Error downloading database:', err.message);
+      res.status(500).json({ error: '無法下載資料庫' });
+    }
+  });
+});
+
+app.post('/upload-db', requireAuth, upload.single('db'), async (req, res) => {
+  try {
+    const dbFile = req.file;
+    if (!dbFile) {
+      return res.status(400).json({ error: '請上傳資料庫檔案' });
+    }
+    const targetPath = path.join('/app/.data', 'freezer.db');
+    fs.renameSync(dbFile.path, targetPath);
+    res.json({ message: '資料庫上傳成功' });
+  } catch (error) {
+    console.error('Error uploading database:', error.message);
+    res.status(500).json({ error: '上傳資料庫失敗：' + error.message });
   }
 });
 
