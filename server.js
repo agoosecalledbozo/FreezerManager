@@ -14,10 +14,17 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 3000;
 
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({ dest: '/tmp/uploads/' }); // Use /tmp for uploads
 app.use(express.json());
 app.use(express.static('public'));
+const SQLiteStore = require('connect-sqlite3')(session);
+
 app.use(session({
+  store: new SQLiteStore({
+    db: 'sessions.db',
+    dir: path.join('/app/.data'),
+    concurrentDB: true
+  }),
   secret: process.env.SESSION_SECRET || 'your-secret-key',
   resave: false,
   saveUninitialized: false,
@@ -29,6 +36,7 @@ app.use(session({
   }
 }));
 
+const dbPath = path.join('/app/.data', 'freezer.db');
 let db;
 
 try {
@@ -47,73 +55,105 @@ app.use((req, res, next) => {
 });
 
 function initializeDatabase() {
+  const dataDir = path.dirname(dbPath);
   try {
-    db = new Database(':memory:');
-    console.log('In-memory database connection established');
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+      console.log(`Created directory: ${dataDir}`);
+    }
 
-    // Create tables
-    db.exec(`
-      CREATE TABLE users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT NOT NULL UNIQUE,
-        password_hash TEXT NOT NULL,
-        nickname TEXT,
-        created_at TEXT NOT NULL
-      )
-    `);
+    db = new Database(dbPath);
+    console.log('Database connection established');
 
-    db.exec(`
-      CREATE TABLE inventory (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        food_category TEXT,
-        food_name TEXT NOT NULL,
-        quantity INTEGER NOT NULL,
-        import_date TEXT NOT NULL,
-        vendor1 TEXT,
-        vendor2 TEXT,
-        vendor3 TEXT,
-        expiration_date TEXT,
-        FOREIGN KEY (user_id) REFERENCES users(id)
-      )
-    `);
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
+    const tableNames = tables.map(table => table.name);
+    console.log(`Existing tables: ${tableNames.join(', ')}`);
 
-    db.exec(`
-      CREATE TABLE consumption (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        food_category TEXT,
-        food_name TEXT NOT NULL,
-        quantity INTEGER NOT NULL,
-        consumption_date TEXT NOT NULL,
-        FOREIGN KEY (user_id) REFERENCES users(id)
-      )
-    `);
+    if (!tableNames.includes('users')) {
+      console.log('Creating users table');
+      db.exec(`
+        CREATE TABLE users (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          username TEXT NOT NULL UNIQUE,
+          password_hash TEXT NOT NULL,
+          nickname TEXT,
+          created_at TEXT NOT NULL
+        )
+      `);
+    } else {
+      const usersInfo = db.prepare("PRAGMA table_info(users)").all();
+      const hasNickname = usersInfo.some(col => col.name === 'nickname');
+      if (!hasNickname) {
+        console.log('Adding nickname column to users table');
+        db.exec('ALTER TABLE users ADD COLUMN nickname TEXT');
+        db.prepare('UPDATE users SET nickname = username WHERE nickname IS NULL').run();
+      }
+    }
 
-    db.exec(`
-      CREATE TABLE foods (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        food_name TEXT NOT NULL UNIQUE,
-        category TEXT,
-        persistent INTEGER DEFAULT 0,
-        persist_on_server INTEGER DEFAULT 0,
-        import_session_id INTEGER,
-        FOREIGN KEY (user_id) REFERENCES users(id),
-        FOREIGN KEY (import_session_id) REFERENCES import_sessions(id)
-      )
-    `);
+    if (!tableNames.includes('inventory')) {
+      console.log('Creating inventory table');
+      db.exec(`
+        CREATE TABLE inventory (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          food_category TEXT,
+          food_name TEXT NOT NULL,
+          quantity INTEGER NOT NULL,
+          import_date TEXT NOT NULL,
+          vendor1 TEXT,
+          vendor2 TEXT,
+          vendor3 TEXT,
+          expiration_date TEXT,
+          FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+      `);
+    }
 
-    db.exec(`
-      CREATE TABLE import_sessions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        session_name TEXT NOT NULL,
-        timestamp TEXT NOT NULL,
-        persistent INTEGER DEFAULT 0,
-        FOREIGN KEY (user_id) REFERENCES users(id)
-      )
-    `);
+    if (!tableNames.includes('consumption')) {
+      console.log('Creating consumption table');
+      db.exec(`
+        CREATE TABLE consumption (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          food_category TEXT,
+          food_name TEXT NOT NULL,
+          quantity INTEGER NOT NULL,
+          consumption_date TEXT NOT NULL,
+          FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+      `);
+    }
+
+    if (!tableNames.includes('foods')) {
+      console.log('Creating foods table');
+      db.exec(`
+        CREATE TABLE foods (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          food_name TEXT NOT NULL UNIQUE,
+          category TEXT,
+          persistent INTEGER DEFAULT 0,
+          persist_on_server INTEGER DEFAULT 0,
+          import_session_id INTEGER,
+          FOREIGN KEY (user_id) REFERENCES users(id),
+          FOREIGN KEY (import_session_id) REFERENCES import_sessions(id)
+        )
+      `);
+    }
+
+    if (!tableNames.includes('import_sessions')) {
+      console.log('Creating import_sessions table');
+      db.exec(`
+        CREATE TABLE import_sessions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          session_name TEXT NOT NULL,
+          timestamp TEXT NOT NULL,
+          persistent INTEGER DEFAULT 0,
+          FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+      `);
+    }
 
     console.log('Database initialized successfully');
   } catch (error) {
@@ -377,7 +417,7 @@ app.post('/import-foods', requireAuth, upload.single('file'), async (req, res) =
 
   let stream;
   try {
-    const filePath = path.join(__dirname, req.file.path);
+    const filePath = path.join('/tmp/uploads', req.file.filename);
     console.log(`Reading file from path: ${filePath}`);
 
     const currentDate = new Date();
@@ -556,20 +596,20 @@ app.post('/load-saved-import', requireAuth, (req, res) => {
 });
 
 app.post('/delete-saved-import', requireAuth, (req, res) => {
-  const { sessionId } = req.body;
-  if (!sessionId || isNaN(sessionId)) {
-    return res.status(400).json({ error: '無效的匯入會話 ID' });
+  const { id } = req.body;
+  if (!id || isNaN(id)) {
+    return res.status(400).json({ error: '無效的記錄 ID' });
   }
 
   try {
-    const session = db.prepare('SELECT * FROM import_sessions WHERE id = ? AND persistent = 1 AND user_id = ?').get(sessionId, req.session.userId);
+    const session = db.prepare('SELECT * FROM import_sessions WHERE id = ? AND persistent = 1 AND user_id = ?').get(id, req.session.userId);
     if (!session) {
       return res.status(404).json({ error: '找不到該匯入會話或該會話未被設為永久保存' });
     }
 
     const transaction = db.transaction(() => {
-      db.prepare('DELETE FROM foods WHERE import_session_id = ? AND user_id = ?').run(sessionId, req.session.userId);
-      db.prepare('DELETE FROM import_sessions WHERE id = ? AND user_id = ?').run(sessionId, req.session.userId);
+      db.prepare('DELETE FROM foods WHERE import_session_id = ? AND user_id = ?').run(id, req.session.userId);
+      db.prepare('DELETE FROM import_sessions WHERE id = ? AND user_id = ?').run(id, req.session.userId);
     });
 
     transaction();
@@ -585,21 +625,21 @@ app.post('/delete-saved-import', requireAuth, (req, res) => {
 });
 
 app.post('/delete-persistent-imports', requireAuth, (req, res) => {
-  const { sessionId } = req.body;
-  if (!sessionId || isNaN(sessionId)) {
-    return res.status(400).json({ error: '無效的匯入會話 ID' });
+  const { id } = req.body;
+  if (!id || isNaN(id)) {
+    return res.status(400).json({ error: '無效的記錄 ID' });
   }
 
   try {
-    const session = db.prepare('SELECT * FROM import_sessions WHERE id = ? AND user_id = ?').get(sessionId, req.session.userId);
+    const session = db.prepare('SELECT * FROM import_sessions WHERE id = ? AND user_id = ?').get(id, req.session.userId);
     if (!session) {
       return res.status(404).json({ error: '找不到該匯入會話' });
     }
 
     const transaction = db.transaction(() => {
-      db.prepare('DELETE FROM foods WHERE import_session_id = ? AND persist_on_server = 1 AND user_id = ?').run(sessionId, req.session.userId);
-      db.prepare('UPDATE import_sessions SET persistent = 0 WHERE id = ? AND user_id = ?').run(sessionId, req.session.userId);
-      db.prepare('DELETE FROM import_sessions WHERE id = ? AND persistent = 0 AND user_id = ?').run(sessionId, req.session.userId);
+      db.prepare('DELETE FROM foods WHERE import_session_id = ? AND persist_on_server = 1 AND user_id = ?').run(id, req.session.userId);
+      db.prepare('UPDATE import_sessions SET persistent = 0 WHERE id = ? AND user_id = ?').run(id, req.session.userId);
+      db.prepare('DELETE FROM import_sessions WHERE id = ? AND persistent = 0 AND user_id = ?').run(id, req.session.userId);
     });
 
     transaction();
