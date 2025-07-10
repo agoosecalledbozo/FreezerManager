@@ -17,14 +17,7 @@ const port = process.env.PORT || 3000;
 const upload = multer({ dest: 'uploads/' });
 app.use(express.json());
 app.use(express.static('public'));
-const SQLiteStore = require('connect-sqlite3')(session);
-
 app.use(session({
-  store: new SQLiteStore({
-    db: 'sessions.db',
-    dir: path.join('/app/.data'),
-    concurrentDB: true
-  }),
   secret: process.env.SESSION_SECRET || 'your-secret-key',
   resave: false,
   saveUninitialized: false,
