@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "description": "A web app for managing freezer inventory",
   "main": "server.js",
-  "scripts": {
-    "start": "node server.js"
-  },
+"scripts": {
+  "start": "node server.js",
+  "postinstall": "npm rebuild better-sqlite3"
+},
   "engines": {
     "node": "18.x"
   },
