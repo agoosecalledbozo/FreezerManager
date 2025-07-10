@@ -1201,43 +1201,46 @@
       document.getElementById('auth_password').value = '';
     }
 
-    async function handleAuth() {
-      const username = document.getElementById('auth_username').value.trim();
-      const password = document.getElementById('auth_password').value;
-      const endpoint = isLoginMode ? '/login' : '/register';
-
-      try {
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password }),
-          credentials: 'include'
-        });
-        const result = await response.json();
-        showNotification(result.message || result.error, !result.error);
-        if (!result.error && isLoginMode) {
-          localStorage.setItem('userNickname', username);
-          closeAuthModal();
-          const sessionValid = await checkSession();
-          if (sessionValid) {
-            await Promise.all([
-              fetchInventory(),
-              fetchConsumption(),
-              fetchFoods(),
-              fetchCategoryCounts(),
-              fetchSavedImports(),
-              fetchPersistentImports()
-            ]);
-          }
-        } else if (!result.error && !isLoginMode) {
-          toggleAuthMode();
-          showNotification('註冊成功，請使用您的帳號登錄', true);
-        }
-      } catch (error) {
-        console.error('Auth error:', error.message);
-        showNotification(`操作失敗：${error.message}`, false);
+async function handleAuth() {
+  const username = document.getElementById('auth_username').value.trim();
+  const password = document.getElementById('auth_password').value;
+  const endpoint = isLoginMode ? '/login' : '/register';
+  const authSubmitBtn = document.getElementById('authSubmitBtn');
+  authSubmitBtn.disabled = true;
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+      credentials: 'include'
+    });
+    const result = await response.json();
+    showNotification(result.message || result.error, !result.error);
+    if (!result.error && isLoginMode) {
+      localStorage.setItem('userNickname', username);
+      closeAuthModal();
+      const sessionValid = await checkSession();
+      if (sessionValid) {
+        await Promise.all([
+          fetchInventory(),
+          fetchConsumption(),
+          fetchFoods(),
+          fetchCategoryCounts(),
+          fetchSavedImports(),
+          fetchPersistentImports()
+        ]);
       }
+    } else if (!result.error && !isLoginMode) {
+      toggleAuthMode();
+      showNotification('註冊成功，請使用您的帳號登錄', true);
     }
+  } catch (error) {
+    console.error('Auth error:', error.message);
+    showNotification(`操作失敗：${error.message}`, false);
+  } finally {
+    authSubmitBtn.disabled = false;
+  }
+}
 
     async function logout() {
       try {
