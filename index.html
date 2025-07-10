@@ -1,0 +1,1378 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>冰箱管理器</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/whatwg-fetch/3.6.20/fetch.min.js"></script>
+<style>
+  #foodTypeSelect {
+    padding: 10px 12px;
+    margin-right: 10px;
+    font-size: 1rem;
+    border-radius: 10px;
+    border: 1px solid #d1e7dd;
+    transition: border-color 0.3s ease;
+  }
+  #foodTypeSelect:focus {
+    border-color: #28a745;
+    box-shadow: 0 0 8px rgba(40, 167, 69, 0.3);
+  }
+
+  .table-container {
+    overflow-x: auto;
+    margin-top: 20px;
+    position: relative;
+    max-height: 500px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    overflow-y: auto;
+  }
+
+  .table-sticky-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: #fff;
+    border-bottom: 1px solid #e9ecef;
+  }
+
+  .table-body-wrapper {
+    position: relative;
+    width: 100%;
+  }
+
+  #inventoryTable,
+  #inventoryTable-body,
+  #consumptionTable,
+  #consumptionTable-body {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    table-layout: fixed;
+    min-width: 1000px;
+  }
+
+  #inventoryTable th,
+  #inventoryTable-body th,
+  #inventoryTable td,
+  #inventoryTable-body td,
+  #consumptionTable th,
+  #consumptionTable-body th,
+  #consumptionTable td,
+  #consumptionTable-body td {
+    white-space: nowrap;
+    padding: 12px;
+    text-align: center;
+    border: 1px solid #e9ecef;
+  }
+
+  #inventoryTable thead th,
+  #consumptionTable thead th {
+    background: linear-gradient(90deg, #f8f9fa, #e9ecef);
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #2a5a2a;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
+  }
+
+  #inventoryTable th:nth-child(1),
+  #inventoryTable-body th:nth-child(1),
+  #inventoryTable td:nth-child(1),
+  #inventoryTable-body td:nth-child(1),
+  #consumptionTable th:nth-child(1),
+  #consumptionTable-body th:nth-child(1),
+  #consumptionTable td:nth-child(1),
+  #consumptionTable-body td:nth-child(1) {
+    min-width: 150px;
+    width: 150px;
+  }
+
+  #inventoryTable th:nth-child(2),
+  #inventoryTable-body th:nth-child(2),
+  #inventoryTable td:nth-child(2),
+  #inventoryTable-body td:nth-child(2),
+  #consumptionTable th:nth-child(2),
+  #consumptionTable-body th:nth-child(2),
+  #consumptionTable td:nth-child(2),
+  #consumptionTable-body td:nth-child(2) {
+    min-width: 120px;
+    width: 120px;
+  }
+
+  #inventoryTable th:nth-child(n+3):nth-child(-n+8),
+  #inventoryTable-body th:nth-child(n+3):nth-child(-n+8),
+  #inventoryTable td:nth-child(n+3):nth-child(-n+8),
+  #inventoryTable-body td:nth-child(n+3):nth-child(-n+8) {
+    min-width: 100px;
+    width: 100px;
+  }
+
+  #consumptionTable th:nth-child(3),
+  #consumptionTable-body th:nth-child(3),
+  #consumptionTable td:nth-child(3),
+  #consumptionTable-body td:nth-child(3) {
+    min-width: 100px;
+    width: 100px;
+  }
+
+  #consumptionTable th:nth-child(4),
+  #consumptionTable-body th:nth-child(4),
+  #consumptionTable td:nth-child(4),
+  #consumptionTable-body td:nth-child(4) {
+    min-width: 120px;
+    width: 120px;
+  }
+
+  .summary {
+    margin-top: 20px;
+    padding: 15px;
+    border: 1px solid #d1e7dd;
+    background: linear-gradient(135deg, #f9fffb, #e6f3eb);
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height 0.4s ease-out, opacity 0.3s ease-in;
+    opacity: 0;
+  }
+
+  .summary.extend-in {
+    max-height: 1000px;
+    opacity: 1;
+  }
+
+  .slide-in {
+    display: block !important;
+    opacity: 1 !important;
+    animation: slideIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+
+  @keyframes slideIn {
+    from {
+      transform: translateY(30px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  .date-selection {
+    margin-bottom: 10px;
+  }
+  .date-selection label {
+    margin-right: 10px;
+  }
+  .date-selection input[type="text"] {
+    margin-right: 10px;
+    padding: 10px;
+    border-radius: 10px;
+  }
+  .add-section input[type="date"] {
+    padding: 10px;
+    font-size: 1rem;
+    width: 150px;
+    border-radius: 10px;
+  }
+
+  .suggestions, .date-suggestions {
+    position: absolute;
+    z-index: 1000;
+    background: #fff;
+    border: 1px solid #d1e7dd;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    max-height: 200px;
+    overflow-y: auto;
+    width: 100%;
+    display: none;
+  }
+
+  .suggestion-item, .date-suggestion-item {
+    padding: 10px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+  }
+
+  .suggestion-item:hover, .date-suggestion-item:hover {
+    background: #e6f3eb;
+  }
+
+  .add-section {
+    position: relative;
+    margin-bottom: 20px;
+  }
+
+  .add-section #suggestions {
+    top: 100%;
+    left: 0;
+    width: calc(100% - 2px);
+  }
+
+  #searchBar {
+    width: 100%;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    border: 1px solid #d1e7dd;
+    border-radius: 10px;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+  }
+
+  #searchBar:focus {
+    border-color: #28a745;
+    box-shadow: 0 0 8px rgba(40, 167, 69, 0.3);
+  }
+</style>
+</head>
+<body>
+  <div id="notification" class="notification"></div>
+  <div id="authModal" class="modal">
+    <div class="modal-content">
+      <span class="close" onclick="closeAuthModal()">×</span>
+      <h2 id="authModalTitle">登錄</h2>
+      <div id="authForm">
+        <label for="auth_username">使用者名稱:</label>
+        <input type="text" id="auth_username" name="auth_username" required>
+        <label for="auth_password">密碼:</label>
+        <input type="password" id="auth_password" name="auth_password" required>
+        <button id="authSubmitBtn" onclick="handleAuth()">登錄</button>
+        <p id="authToggle" style="cursor: pointer; color: #28a745;" onclick="toggleAuthMode()">沒有帳號？點此註冊</p>
+      </div>
+    </div>
+  </div>
+  <div class="container" id="mainContainer" style="display: none;">
+    <div id="userStatus" style="text-align: right; margin-bottom: 20px;">
+      <span id="userNickname"></span>
+      <span id="settingsIcon" onclick="openSettingsModal()" style="cursor: pointer; font-size: 1.2rem; margin-left: 10px;" title="設定">⚙️</span>
+      <button id="logoutBtn" onclick="logout()" style="display: none;">登出</button>
+    </div>
+
+    <div id="settingsModal" class="modal">
+      <div class="modal-content">
+        <span class="close" onclick="closeSettingsModal()">×</span>
+        <h2>設定</h2>
+        <div id="settingsForm">
+          <h3>更改密碼</h3>
+          <label for="old_password">舊密碼:</label>
+          <input type="password" id="old_password" name="old_password" required>
+          <label for="new_password">新密碼:</label>
+          <input type="password" id="new_password" name="new_password" required>
+          <button onclick="changePassword()">更改密碼</button>
+          
+          <h3>更新暱稱</h3>
+          <label for="new_nickname">新暱稱:</label>
+          <input type="text" id="new_nickname" name="new_nickname" placeholder="輸入新暱稱（例如：Katie）">
+          <button onclick="updateNickname()">更新暱稱</button>
+        </div>
+      </div>
+    </div>
+    <h1>冰箱管理器</h1>
+
+    <div class="add-section">
+      <h2>新增食品</h2>
+      <label for="add_date">進貨日期:</label>
+      <input type="date" id="add_date" name="add_date" autocomplete="off">
+      <div id="add_date_suggestions" class="date-suggestions"></div>
+      <label for="food">食品名稱:</label>
+      <input type="text" id="food" name="food" autocomplete="off">
+      <div id="suggestions" class="suggestions"></div>
+      <label for="foodTypeFilter">食品分類:</label>
+      <select id="foodTypeFilter" onchange="updateFoodSuggestions()">
+        <option value="">所有分類</option>
+      </select>
+      <label for="quantity">數量:</label>
+      <input type="number" id="quantity" name="quantity" step="1" min="0">
+      <label for="vendor1">廠商1:</label>
+      <input type="text" id="vendor1" name="vendor1">
+      <label for="vendor2">廠商2:</label>
+      <input type="text" id="vendor2" name="vendor2">
+      <label for="vendor3">廠商3:</label>
+      <input type="text" id="vendor3" name="vendor3">
+      <label for="expiration_date">有效期限:</label>
+      <input type="date" id="expiration_date" name="expiration_date">
+      <button onclick="addInventory()">新增</button>
+    </div>
+
+    <div class="consumption-section">
+      <h2>記錄食品消耗</h2>
+      <label for="consume_food">食品名稱:</label>
+      <input type="text" id="consume_food" name="consume_food" autocomplete="off">
+      <div id="consume_suggestions" class="suggestions"></div>
+      <label for="consume_food_category">食品分類:</label>
+      <select id="consume_food_category" name="consume_food_category" disabled>
+        <option value="">自動選擇</option>
+      </select>
+      <label for="consume_quantity">消耗數量:</label>
+      <input type="number" id="consume_quantity" name="consume_quantity" step="1" min="0">
+      <label for="consume_date">消耗日期:</label>
+      <input type="date" id="consume_date" name="consume_date">
+      <button onclick="addConsumption()">記錄消耗</button>
+    </div>
+
+    <div>
+      <h2>匯入食品資料</h2>
+      <input type="file" id="import_file" accept=".xlsx">
+      <label for="persistent_import">永久保存此匯入資料（以便稍後使用）:</label>
+      <input type="checkbox" id="persistent_import" name="persistent_import">
+      <label for="persist_on_server">永久保存並在伺服器啟動時載入:</label>
+      <input type="checkbox" id="persist_on_server" name="persist_on_server">
+      <label for="session_name">匯入名稱（可選）:</label>
+      <input type="text" id="session_name" name="session_name" placeholder="輸入匯入名稱">
+      <button onclick="importFoods()">匯入</button>
+    </div>
+
+    <div>
+      <h2>使用已保存的資料</h2>
+      <label for="saved_imports">選擇已保存的匯入資料:</label>
+      <select id="saved_imports">
+        <option value="">-- 選擇一個匯入會話 --</option>
+      </select>
+      <button onclick="loadSavedImport()">載入</button>
+      <button onclick="deleteSavedImport()">刪除</button>
+    </div>
+
+    <div>
+      <h2>管理伺服器持久匯入資料</h2>
+      <label for="persistent_imports">選擇持久匯入資料以刪除:</label>
+      <select id="persistent_imports">
+        <option value="">-- 選擇一個持久匯入會話 --</option>
+      </select>
+      <button onclick="deletePersistentImport()">刪除</button>
+    </div>
+
+    <div>
+      <h2>庫存總計</h2>
+      <button onclick="updateInitialStock()">更新期初庫存</button>
+      <button onclick="toggleSummary()">顯示總計</button>
+      <div id="summary" class="summary"></div>
+    </div>
+
+    <div>
+      <label for="foodTypeSelect">按食品分類篩選:</label>
+      <select id="foodTypeSelect" onchange="filterTable()">
+        <option value="">所有分類</option>
+      </select>
+      <label for="searchBar">搜尋食品:</label>
+      <input type="text" id="searchBar" placeholder="輸入食品名稱以搜尋" oninput="filterTable()">
+    </div>
+
+    <h2>庫存表格</h2>
+    <div class="table-container">
+      <div class="table-sticky-header">
+        <table id="inventoryTable">
+          <thead>
+            <tr id="inventoryTableHeader"></tr>
+          </thead>
+        </table>
+      </div>
+      <div class="table-body-wrapper">
+        <table id="inventoryTable-body">
+          <tbody id="inventoryTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <h2>消耗記錄表格</h2>
+    <div class="table-container">
+      <div class="table-sticky-header">
+        <table id="consumptionTable">
+          <thead>
+            <tr id="consumptionTableHeader"></tr>
+          </thead>
+        </table>
+      </div>
+      <div class="table-body-wrapper">
+        <table id="consumptionTable-body">
+          <tbody id="consumptionTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="editModal" class="modal">
+    <div class="modal-content">
+      <span class="close" onclick="closeEditModal()">×</span>
+      <h2>編輯庫存記錄</h2>
+      <label for="edit_date">進貨日期:</label>
+      <input type="date" id="edit_date" name="edit_date">
+      <div id="edit_date_suggestions" class="date-suggestions"></div>
+      <label for="edit_food">食品名稱:</label>
+      <input type="text" id="edit_food" name="edit_food" autocomplete="off">
+      <div id="edit_suggestions" class="suggestions"></div>
+      <label for="edit_quantity">數量:</label>
+      <input type="number" id="edit_quantity" name="edit_quantity" step="1" min="0">
+      <label for="edit_vendor1">廠商1:</label>
+      <input type="text" id="edit_vendor1" name="edit_vendor1">
+      <label for="edit_vendor2">廠商2:</label>
+      <input type="text" id="edit_vendor2" name="edit_vendor2">
+      <label for="edit_vendor3">廠商3:</label>
+      <input type="text" id="edit_vendor3" name="edit_vendor3">
+      <label for="edit_expiration_date">有效期限:</label>
+      <input type="date" id="edit_expiration_date" name="edit_expiration_date">
+      <input type="hidden" id="edit_record_id">
+      <button onclick="saveEdit()">儲存</button>
+    </div>
+  </div>
+
+  <script>
+    let isLoginMode = true;
+    let inventoryData = [];
+    let consumptionData = [];
+    let foods = [];
+    let categoryCounts = {};
+    let initialStock = {};
+    let midTermStock = {};
+    let currentStock = {};
+
+    function showNotification(message, isSuccess) {
+      const notification = document.getElementById('notification');
+      notification.textContent = message;
+      notification.className = 'notification';
+      notification.classList.add(isSuccess ? 'success' : 'error');
+      notification.style.display = 'block';
+      notification.classList.add('slide-in');
+      setTimeout(() => {
+        notification.style.opacity = '0';
+        setTimeout(() => {
+          notification.style.display = 'none';
+          notification.style.opacity = '1';
+          notification.classList.remove('slide-in');
+        }, 500);
+      }, 3000);
+    }
+
+    async function fetchInventory() {
+      try {
+        const response = await fetch('/inventory', { credentials: 'include' });
+        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+        const fetchedData = await response.json();
+        inventoryData = fetchedData.length > 0 ? fetchedData : [];
+        renderInventoryTable();
+      } catch (error) {
+        console.error('Error fetching inventory:', error.message);
+        showNotification('無法獲取庫存資料：' + error.message, false);
+        inventoryData = [];
+        renderInventoryTable();
+      }
+    }
+
+    async function fetchConsumption() {
+      try {
+        const response = await fetch('/consumption', { credentials: 'include' });
+        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+        const fetchedData = await response.json();
+        consumptionData = fetchedData.length > 0 ? fetchedData : [];
+        renderConsumptionTable();
+      } catch (error) {
+        console.error('Error fetching consumption:', error.message);
+        showNotification('無法獲取消耗資料：' + error.message, false);
+        consumptionData = [];
+        renderConsumptionTable();
+      }
+    }
+
+    async function fetchFoods() {
+      try {
+        const response = await fetch('/foods', { credentials: 'include' });
+        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+        foods = await response.json();
+        populateFoodTypeDropdown();
+        return foods;
+      } catch (error) {
+        console.error('Error fetching foods:', error.message);
+        showNotification('無法獲取食品資料：' + error.message, false);
+        foods = [];
+        return [];
+      }
+    }
+
+    async function fetchCategoryCounts() {
+      try {
+        const response = await fetch('/category-counts', { credentials: 'include' });
+        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+        categoryCounts = await response.json();
+        populateFoodTypeDropdown();
+      } catch (error) {
+        console.error('Error fetching category counts:', error.message);
+        showNotification('無法獲取食品分類計數：' + error.message, false);
+      }
+    }
+
+    async function fetchSavedImports() {
+      try {
+        const response = await fetch('/saved-imports', { credentials: 'include' });
+        const savedImports = await response.json();
+        const select = document.getElementById('saved_imports');
+        select.innerHTML = '<option value="">-- 選擇一個匯入會話 --</option>';
+        savedImports.forEach(session => {
+          const option = document.createElement('option');
+          option.value = session.id;
+          option.textContent = `${session.session_name} (${new Date(session.timestamp).toLocaleString()})`;
+          select.appendChild(option);
+        });
+      } catch (error) {
+        console.error('Error fetching saved imports:', error.message);
+        showNotification('無法獲取已保存的匯入資料：' + error.message, false);
+      }
+    }
+
+    async function fetchPersistentImports() {
+      try {
+        const response = await fetch('/persistent-imports', { credentials: 'include' });
+        const persistentImports = await response.json();
+        const select = document.getElementById('persistent_imports');
+        select.innerHTML = '<option value="">-- 選擇一個持久匯入會話 --</option>';
+        persistentImports.forEach(session => {
+          const option = document.createElement('option');
+          option.value = session.id;
+          option.textContent = `${session.session_name} (${new Date(session.timestamp).toLocaleString()})`;
+          select.appendChild(option);
+        });
+      } catch (error) {
+        console.error('Error fetching persistent imports:', error.message);
+        showNotification('無法獲取伺服器持久匯入資料：' + error.message, false);
+      }
+    }
+
+    function setupFoodSearch(inputId, suggestionsId) {
+      const foodInput = document.getElementById(inputId);
+      const suggestionsDiv = document.getElementById(suggestionsId);
+      const foodTypeFilter = inputId === 'food' || inputId === 'edit_food' ? document.getElementById('foodTypeFilter') : null;
+      suggestionsDiv.style.display = 'block';
+
+      foodInput.addEventListener('input', () => {
+        const query = foodInput.value.trim().toLowerCase();
+        const selectedType = foodTypeFilter ? foodTypeFilter.value : null;
+        suggestionsDiv.innerHTML = '';
+        if (query.length === 0) {
+          suggestionsDiv.style.display = 'none';
+          return;
+        }
+
+        const filteredFoods = foods.filter(food =>
+          food.name.toLowerCase().includes(query) &&
+          (!foodTypeFilter || selectedType === '' || food.category === selectedType)
+        );
+
+        if (filteredFoods.length === 0) {
+          const noMatchItem = document.createElement('div');
+          noMatchItem.classList.add('suggestion-item');
+          noMatchItem.textContent = '無匹配食品';
+          noMatchItem.style.color = '#888';
+          noMatchItem.style.cursor = 'default';
+          suggestionsDiv.appendChild(noMatchItem);
+          suggestionsDiv.style.display = 'block';
+          return;
+        }
+
+        filteredFoods.forEach(food => {
+          const suggestionItem = document.createElement('div');
+          suggestionItem.classList.add('suggestion-item');
+          suggestionItem.textContent = food.name;
+          suggestionItem.addEventListener('click', () => {
+            foodInput.value = food.name;
+            suggestionsDiv.style.display = 'none';
+            if (inputId === 'food' || inputId === 'edit_food') {
+              const foodTypeFilterSelect = document.getElementById('foodTypeFilter');
+              foodTypeFilterSelect.value = food.category || '';
+            } else if (inputId === 'consume_food') {
+              const consumeFoodCategory = document.getElementById('consume_food_category');
+              consumeFoodCategory.value = food.category || '';
+            }
+          });
+          suggestionsDiv.appendChild(suggestionItem);
+        });
+
+        suggestionsDiv.style.display = 'block';
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!foodInput.contains(e.target) && !suggestionsDiv.contains(e.target)) {
+          suggestionsDiv.style.display = 'none';
+        }
+      });
+    }
+
+    function setupDateSearch(inputId, suggestionsId) {
+      const dateInput = document.getElementById(inputId);
+      const dateSuggestionsDiv = document.getElementById(suggestionsId);
+      const rows = inventoryData.slice(1);
+      const uniqueDates = [...new Set(rows.map(row => row[1]))].sort((a, b) => new Date(b) - new Date(a));
+
+      dateInput.addEventListener('input', () => {
+        let query = dateInput.value.trim().replace(/-/g, '/').toLowerCase();
+        dateSuggestionsDiv.innerHTML = '';
+        if (query.length === 0) {
+          dateSuggestionsDiv.style.display = 'none';
+          return;
+        }
+
+        const filteredDates = uniqueDates.filter(date => date.toLowerCase().includes(query));
+        if (filteredDates.length === 0) {
+          const noMatchItem = document.createElement('div');
+          noMatchItem.classList.add('date-suggestion-item');
+          noMatchItem.textContent = '無匹配日期';
+          noMatchItem.style.color = '#888';
+          noMatchItem.style.cursor = 'default';
+          dateSuggestionsDiv.appendChild(noMatchItem);
+          dateSuggestionsDiv.style.display = 'block';
+          return;
+        }
+
+        filteredDates.forEach(date => {
+          const suggestionItem = document.createElement('div');
+          suggestionItem.classList.add('date-suggestion-item');
+          suggestionItem.textContent = date;
+          suggestionItem.addEventListener('click', () => {
+            dateInput.value = date.replace(/\//g, '-');
+            dateSuggestionsDiv.style.display = 'none';
+          });
+          dateSuggestionsDiv.appendChild(suggestionItem);
+        });
+
+        dateSuggestionsDiv.style.display = 'block';
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!dateInput.contains(e.target) && !dateSuggestionsDiv.contains(e.target)) {
+          dateSuggestionsDiv.style.display = 'none';
+        }
+      });
+    }
+
+    function updateFoodSuggestions() {
+      const foodInput = document.getElementById('food');
+      if (foodInput) {
+        const event = new Event('input');
+        foodInput.dispatchEvent(event);
+      }
+    }
+
+    function populateFoodTypeDropdown() {
+      const foodTypeFilter = document.getElementById('foodTypeFilter');
+      const foodTypeSelect = document.getElementById('foodTypeSelect');
+      const consumeFoodCategory = document.getElementById('consume_food_category');
+      if (!foodTypeFilter || !foodTypeSelect || !consumeFoodCategory) return;
+
+      foodTypeFilter.innerHTML = '<option value="">所有分類</option>';
+      foodTypeSelect.innerHTML = '<option value="">所有分類</option>';
+      consumeFoodCategory.innerHTML = '<option value="">自動選擇</option>';
+      const categories = Object.keys(categoryCounts).sort();
+      categories.forEach(category => {
+        const option1 = document.createElement('option');
+        option1.value = category;
+        option1.textContent = category;
+        foodTypeFilter.appendChild(option1);
+
+        const option2 = document.createElement('option');
+        option2.value = category;
+        option2.textContent = category;
+        foodTypeSelect.appendChild(option2);
+
+        const option3 = document.createElement('option');
+        option3.value = category;
+        option3.textContent = category;
+        consumeFoodCategory.appendChild(option3);
+      });
+    }
+
+    function filterTable() {
+      const foodCategory = document.getElementById('foodTypeSelect').value;
+      const searchQuery = document.getElementById('searchBar').value.trim().toLowerCase();
+      renderInventoryTable(foodCategory, searchQuery);
+    }
+
+    function renderInventoryTable(foodCategory = '', searchQuery = '') {
+      const table = document.getElementById('inventoryTable');
+      const bodyTable = document.getElementById('inventoryTable-body');
+      const tableHeader = document.getElementById('inventoryTableHeader');
+      const tableBody = document.getElementById('inventoryTableBody');
+
+      if (!table || !bodyTable || !tableHeader || !tableBody) {
+        showNotification('表格未找到，請重新載入頁面', false);
+        return;
+      }
+
+      const headers = ['操作', '食品分類', '食品名稱', '數量', '進貨日期', '廠商1', '廠商2', '廠商3', '有效期限'];
+      tableHeader.innerHTML = headers.map(header => `<th>${header}</th>`).join('');
+
+      if (!inventoryData || inventoryData.length === 0) {
+        tableBody.innerHTML = `<tr><td colspan="${headers.length}">無庫存資料</td></tr>`;
+        return;
+      }
+
+      const rows = inventoryData.slice(1).filter(row => {
+        const foodCategory = row[1] || '';
+        const foodName = row[2].toLowerCase();
+        return (!foodCategory || row[1] === foodCategory) && (!searchQuery || foodName.includes(searchQuery));
+      }).sort((a, b) => a[1].localeCompare(b[1]));
+
+      let tableBodyHTML = '';
+      if (rows.length === 0) {
+        tableBodyHTML = `<tr><td colspan="${headers.length}">無符合條件的記錄</td></tr>`;
+      } else {
+        tableBodyHTML = rows.map(row => {
+          const [id, category, name, quantity, date, vendor1, vendor2, vendor3, expiration] = row;
+          return `
+            <tr>
+              <td>
+                <button class="delete-btn" data-id="${id}">刪除</button>
+                <button class="edit-btn" data-id="${id}" data-date="${date}" data-food="${name}" data-quantity="${quantity}" data-vendor1="${vendor1 || ''}" data-vendor2="${vendor2 || ''}" data-vendor3="${vendor3 || ''}" data-expiration="${expiration || ''}">編輯</button>
+              </td>
+              <td>${category || ''}</td>
+              <td>${name}</td>
+              <td>${quantity}</td>
+              <td>${date}</td>
+              <td>${vendor1 || ''}</td>
+              <td>${vendor2 || ''}</td>
+              <td>${vendor3 || ''}</td>
+              <td>${expiration || ''}</td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      tableBody.innerHTML = tableBodyHTML;
+
+      tableBody.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', () => deleteRecord(btn.getAttribute('data-id')));
+      });
+
+      tableBody.querySelectorAll('.edit-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          openEditModal(
+            btn.getAttribute('data-id'),
+            btn.getAttribute('data-date'),
+            btn.getAttribute('data-food'),
+            btn.getAttribute('data-quantity'),
+            btn.getAttribute('data-vendor1'),
+            btn.getAttribute('data-vendor2'),
+            btn.getAttribute('data-vendor3'),
+            btn.getAttribute('data-expiration')
+          );
+        });
+      });
+
+      calculateStock();
+      updateSummary();
+    }
+
+    function renderConsumptionTable() {
+      const table = document.getElementById('consumptionTable');
+      const bodyTable = document.getElementById('consumptionTable-body');
+      const tableHeader = document.getElementById('consumptionTableHeader');
+      const tableBody = document.getElementById('consumptionTableBody');
+
+      if (!table || !bodyTable || !tableHeader || !tableBody) {
+        showNotification('消耗表格未找到，請重新載入頁面', false);
+        return;
+      }
+
+      const headers = ['操作', '食品分類', '食品名稱', '消耗數量', '消耗日期'];
+      tableHeader.innerHTML = headers.map(header => `<th>${header}</th>`).join('');
+
+      if (!consumptionData || consumptionData.length === 0) {
+        tableBody.innerHTML = `<tr><td colspan="${headers.length}">無消耗記錄</td></tr>`;
+        return;
+      }
+
+      const rows = consumptionData.slice(1);
+      tableBody.innerHTML = rows.map(row => {
+        const [id, category, name, quantity, date] = row;
+        return `
+          <tr>
+            <td>
+              <button class="delete-btn" data-id="${id}">刪除</button>
+            </td>
+            <td>${category || ''}</td>
+            <td>${name}</td>
+            <td>${quantity}</td>
+            <td>${date}</td>
+          </tr>
+        `;
+      }).join('');
+
+      tableBody.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', () => deleteConsumption(btn.getAttribute('data-id')));
+      });
+    }
+
+    async function addInventory() {
+      const date = document.getElementById('add_date').value.replace(/-/g, '/');
+      const food = document.getElementById('food').value.trim();
+      const quantity = parseInt(document.getElementById('quantity').value);
+      const vendor1 = document.getElementById('vendor1').value.trim();
+      const vendor2 = document.getElementById('vendor2').value.trim();
+      const vendor3 = document.getElementById('vendor3').value.trim();
+      const expiration = document.getElementById('expiration_date').value.replace(/-/g, '/');
+
+      const dateRegex = /^\d{4}\/\d{2}\/\d{2}$/;
+      if (!dateRegex.test(date)) {
+        showNotification('請輸入有效的進貨日期格式 (YYYY/MM/DD)', false);
+        return;
+      }
+
+      if (!food || !quantity || isNaN(quantity) || quantity <= 0) {
+        showNotification('請輸入有效的食品名稱和數量', false);
+        return;
+      }
+
+      if (!foods.some(f => f.name === food)) {
+        showNotification('請選擇或輸入有效的食品名稱', false);
+        return;
+      }
+
+      if (expiration && !dateRegex.test(expiration)) {
+        showNotification('請輸入有效的有效期限格式 (YYYY/MM/DD)', false);
+        return;
+      }
+
+      try {
+        const response = await fetch('/add-inventory', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ date, food, quantity, vendor1, vendor2, vendor3, expiration }),
+          credentials: 'include'
+        });
+        const result = await response.json();
+        showNotification(result.message || result.error, !result.error);
+        await fetchInventory();
+      } catch (error) {
+        console.error('Error adding inventory:', error.message);
+        showNotification('新增庫存失敗：' + error.message, false);
+      }
+    }
+
+    async function addConsumption() {
+      const food = document.getElementById('consume_food').value.trim();
+      const quantity = parseInt(document.getElementById('consume_quantity').value);
+      const date = document.getElementById('consume_date').value.replace(/-/g, '/');
+
+      const dateRegex = /^\d{4}\/\d{2}\/\d{2}$/;
+      if (!dateRegex.test(date)) {
+        showNotification('請輸入有效的消耗日期格式 (YYYY/MM/DD)', false);
+        return;
+      }
+
+      if (!food || !quantity || isNaN(quantity) || quantity <= 0) {
+        showNotification('請輸入有效的食品名稱和消耗數量', false);
+        return;
+      }
+
+      if (!foods.some(f => f.name === food)) {
+        showNotification('請選擇或輸入有效的食品名稱', false);
+        return;
+      }
+
+      try {
+        const response = await fetch('/add-consumption', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ food, quantity, date }),
+          credentials: 'include'
+        });
+        const result = await response.json();
+        showNotification(result.message || result.error, !result.error);
+        await Promise.all([fetchInventory(), fetchConsumption()]);
+      } catch (error) {
+        console.error('Error adding consumption:', error.message);
+        showNotification('記錄消耗失敗：' + error.message, false);
+      }
+    }
+
+    async function deleteRecord(id) {
+      try {
+        const response = await fetch('/delete-inventory', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id }),
+          credentials: 'include'
+        });
+        const result = await response.json();
+        showNotification(result.message || result.error, !result.error);
+        await fetchInventory();
+      } catch (error) {
+        console.error('Error deleting record:', error.message);
+        showNotification('刪除庫存記錄失敗：' + error.message, false);
+      }
+    }
+
+    async function deleteConsumption(id) {
+      try {
+        const response = await fetch('/delete-consumption', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id }),
+          credentials: 'include'
+        });
+        const result = await response.json();
+        showNotification(result.message || result.error, !result.error);
+        await Promise.all([fetchInventory(), fetchConsumption()]);
+      } catch (error) {
+        console.error('Error deleting consumption:', error.message);
+        showNotification('刪除消耗記錄失敗：' + error.message, false);
+      }
+    }
+
+    function openEditModal(id, date, food, quantity, vendor1, vendor2, vendor3, expiration) {
+      const editRecordId = document.getElementById('edit_record_id');
+      const editDate = document.getElementById('edit_date');
+      const editFood = document.getElementById('edit_food');
+      const editQuantity = document.getElementById('edit_quantity');
+      const editVendor1 = document.getElementById('edit_vendor1');
+      const editVendor2 = document.getElementById('edit_vendor2');
+      const editVendor3 = document.getElementById('edit_vendor3');
+      const editExpiration = document.getElementById('edit_expiration_date');
+
+      editRecordId.value = id;
+      editDate.value = date.split('/').join('-');
+      editFood.value = food;
+      editQuantity.value = quantity;
+      editVendor1.value = vendor1 || '';
+      editVendor2.value = vendor2 || '';
+      editVendor3.value = vendor3 || '';
+      editExpiration.value = expiration ? expiration.split('/').join('-') : '';
+
+      document.getElementById('editModal').style.display = 'block';
+    }
+
+    function closeEditModal() {
+      document.getElementById('editModal').style.display = 'none';
+    }
+
+    async function saveEdit() {
+      const id = document.getElementById('edit_record_id').value;
+      const date = document.getElementById('edit_date').value.replace(/-/g, '/');
+      const food = document.getElementById('edit_food').value.trim();
+      const quantity = parseInt(document.getElementById('edit_quantity').value);
+      const vendor1 = document.getElementById('edit_vendor1').value.trim();
+      const vendor2 = document.getElementById('edit_vendor2').value.trim();
+      const vendor3 = document.getElementById('edit_vendor3').value.trim();
+      const expiration = document.getElementById('edit_expiration_date').value.replace(/-/g, '/');
+
+      const dateRegex = /^\d{4}\/\d{2}\/\d{2}$/;
+      if (!dateRegex.test(date)) {
+        showNotification('請輸入有效的進貨日期格式 (YYYY/MM/DD)', false);
+        return;
+      }
+
+      if (!food || !quantity || isNaN(quantity) || quantity <= 0) {
+        showNotification('請輸入有效的食品名稱和數量', false);
+        return;
+      }
+
+      if (!foods.some(f => f.name === food)) {
+        showNotification('請選擇或輸入有效的食品名稱', false);
+        return;
+      }
+
+      if (expiration && !dateRegex.test(expiration)) {
+        showNotification('請輸入有效的有效期限格式 (YYYY/MM/DD)', false);
+        return;
+      }
+
+      try {
+        const response = await fetch('/edit-inventory', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, date, food, quantity, vendor1, vendor2, vendor3, expiration }),
+          credentials: 'include'
+        });
+        const result = await response.json();
+        showNotification(result.message || result.error, !result.error);
+        closeEditModal();
+        await fetchInventory();
+      } catch (error) {
+        console.error('Error editing record:', error.message);
+        showNotification('編輯庫存記錄失敗：' + error.message, false);
+      }
+    }
+
+    async function importFoods() {
+      const fileInput = document.getElementById('import_file');
+      const file = fileInput.files[0];
+      if (!file) {
+        showNotification('請選擇一個檔案', false);
+        return;
+      }
+
+      const persistent = document.getElementById('persistent_import').checked;
+      const persistOnServer = document.getElementById('persist_on_server').checked;
+      const sessionName = document.getElementById('session_name').value.trim();
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('persistent', persistent);
+      formData.append('persist_on_server', persistOnServer);
+      if (sessionName) formData.append('sessionName', sessionName);
+
+      try {
+        const response = await fetch('/import-foods', {
+          method: 'POST',
+          body: formData,
+          credentials: 'include'
+        });
+        const result = await response.json();
+        showNotification(result.message || result.error, !result.error);
+        await Promise.all([fetchFoods(), fetchCategoryCounts(), fetchSavedImports(), fetchPersistentImports()]);
+      } catch (error) {
+        console.error('Error importing foods:', error.message);
+        showNotification('匯入食品資料失敗：' + error.message, false);
+      }
+    }
+
+    async function loadSavedImport() {
+      const sessionId = document.getElementById('saved_imports').value;
+      if (!sessionId) {
+        showNotification('請選擇一個已保存的匯入會話', false);
+        return;
+      }
+
+      try {
+        const response = await fetch('/load-saved-import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId }),
+          credentials: 'include'
+        });
+        const result = await response.json();
+        showNotification(result.message || result.error, !result.error);
+        await fetchFoods();
+      } catch (error) {
+        console.error('Error loading saved import:', error.message);
+        showNotification('載入保存的匯入資料失敗：' + error.message, false);
+      }
+    }
+
+    async function deleteSavedImport() {
+      const sessionId = document.getElementById('saved_imports').value;
+      if (!sessionId) {
+        showNotification('請選擇一個已保存的匯入會話', false);
+        return;
+      }
+
+      try {
+        const response = await fetch('/delete-saved-import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId }),
+          credentials: 'include'
+        });
+        const result = await response.json();
+        showNotification(result.message || result.error, !result.error);
+        await Promise.all([fetchSavedImports(), fetchFoods()]);
+      } catch (error) {
+        console.error('Error deleting saved import:', error.message);
+        showNotification('刪除保存的匯入資料失敗：' + error.message, false);
+      }
+    }
+
+    async function deletePersistentImport() {
+      const sessionId = document.getElementById('persistent_imports').value;
+      if (!sessionId) {
+        showNotification('請選擇一個伺服器持久匯入會話', false);
+        return;
+      }
+
+      try {
+        const response = await fetch('/delete-persistent-imports', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId }),
+          credentials: 'include'
+        });
+        const result = await response.json();
+        showNotification(result.message || result.error, !result.error);
+        await Promise.all([fetchPersistentImports(), fetchFoods()]);
+      } catch (error) {
+        console.error('Error deleting persistent import:', error.message);
+        showNotification('刪除伺服器持久匯入資料失敗：' + error.message, false);
+      }
+    }
+
+    function calculateStock() {
+      currentStock = {};
+      midTermStock = {};
+      inventoryData.slice(1).forEach(row => {
+        const foodName = row[2];
+        const quantity = parseInt(row[3]);
+        currentStock[foodName] = (currentStock[foodName] || 0) + quantity;
+      });
+
+      consumptionData.slice(1).forEach(row => {
+        const foodName = row[2];
+        const quantity = parseInt(row[3]);
+        currentStock[foodName] = (currentStock[foodName] || 0) - quantity;
+      });
+
+      Object.keys(currentStock).forEach(food => {
+        midTermStock[food] = (initialStock[food] || 0) + (inventoryData.slice(1).find(row => row[2] === food)?.[3] || 0);
+      });
+    }
+
+    function updateInitialStock() {
+      initialStock = { ...currentStock };
+      showNotification('期初庫存已更新', true);
+      updateSummary();
+    }
+
+    function toggleSummary() {
+      const summaryDiv = document.getElementById('summary');
+      if (summaryDiv.classList.contains('extend-in')) {
+        summaryDiv.classList.remove('extend-in');
+        summaryDiv.style.display = 'none';
+      } else {
+        calculateStock();
+        summaryDiv.style.display = 'block';
+        setTimeout(() => summaryDiv.classList.add('extend-in'), 0);
+      }
+      updateSummary();
+    }
+
+    function updateSummary() {
+      const summaryDiv = document.getElementById('summary');
+      let summaryHtml = '<h3>庫存總計</h3>';
+      Object.keys(currentStock).forEach(food => {
+        summaryHtml += `
+          <p>${food}: 期初 ${initialStock[food] || 0}, 期中 ${midTermStock[food] || 0}, 庫存 ${currentStock[food] || 0}</p>
+        `;
+      });
+      summaryDiv.innerHTML = summaryHtml;
+    }
+
+    function setDefaultDate() {
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const formattedDate = `${year}-${month}-${day}`;
+      document.getElementById('add_date').value = formattedDate;
+      document.getElementById('consume_date').value = formattedDate;
+    }
+
+    async function checkSession() {
+      try {
+        const response = await fetch('/inventory', { credentials: 'include' });
+        if (response.status === 401 || !response.ok) {
+          showAuthModal();
+          localStorage.removeItem('userNickname');
+          document.getElementById('userNickname').textContent = '';
+          document.getElementById('settingsIcon').style.display = 'none';
+          document.getElementById('logoutBtn').style.display = 'none';
+          document.getElementById('mainContainer').style.display = 'none';
+          return false;
+        }
+        const userNickname = localStorage.getItem('userNickname');
+        if (userNickname) {
+          document.getElementById('userNickname').textContent = userNickname;
+          document.getElementById('settingsIcon').style.display = 'inline';
+          document.getElementById('logoutBtn').style.display = 'inline-block';
+          document.getElementById('mainContainer').style.display = 'block';
+          return true;
+        }
+        showAuthModal();
+        return false;
+      } catch (error) {
+        console.error('Session check error:', error.message);
+        showAuthModal();
+        return false;
+      }
+    }
+
+    function showAuthModal() {
+      document.getElementById('authModal').style.display = 'block';
+      document.getElementById('mainContainer').style.display = 'none';
+    }
+
+    function closeAuthModal() {
+      document.getElementById('authModal').style.display = 'none';
+    }
+
+    function toggleAuthMode() {
+      isLoginMode = !isLoginMode;
+      document.getElementById('authModalTitle').textContent = isLoginMode ? '登錄' : '註冊';
+      document.getElementById('authSubmitBtn').textContent = isLoginMode ? '登錄' : '註冊';
+      document.getElementById('authToggle').textContent = isLoginMode ? '沒有帳號？點此註冊' : '已有帳號？點此登錄';
+      document.getElementById('auth_username').value = '';
+      document.getElementById('auth_password').value = '';
+    }
+
+    async function handleAuth() {
+      const username = document.getElementById('auth_username').value.trim();
+      const password = document.getElementById('auth_password').value;
+      const endpoint = isLoginMode ? '/login' : '/register';
+
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+          credentials: 'include'
+        });
+        const result = await response.json();
+        showNotification(result.message || result.error, !result.error);
+        if (!result.error && isLoginMode) {
+          localStorage.setItem('userNickname', username);
+          closeAuthModal();
+          const sessionValid = await checkSession();
+          if (sessionValid) {
+            await Promise.all([
+              fetchInventory(),
+              fetchConsumption(),
+              fetchFoods(),
+              fetchCategoryCounts(),
+              fetchSavedImports(),
+              fetchPersistentImports()
+            ]);
+          }
+        } else if (!result.error && !isLoginMode) {
+          toggleAuthMode();
+          showNotification('註冊成功，請使用您的帳號登錄', true);
+        }
+      } catch (error) {
+        console.error('Auth error:', error.message);
+        showNotification(`操作失敗：${error.message}`, false);
+      }
+    }
+
+    async function logout() {
+      try {
+        const response = await fetch('/logout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include'
+        });
+        const result = await response.json();
+        showNotification(result.message || result.error, !result.error);
+        localStorage.removeItem('userNickname');
+        document.getElementById('userNickname').textContent = '';
+        document.getElementById('settingsIcon').style.display = 'none';
+        document.getElementById('logoutBtn').style.display = 'none';
+        showAuthModal();
+        inventoryData = [];
+        consumptionData = [];
+        foods = [];
+        renderInventoryTable();
+        renderConsumptionTable();
+      } catch (error) {
+        console.error('Logout error:', error.message);
+        showNotification('登出失敗：' + error.message, false);
+      }
+    }
+
+    function openSettingsModal() {
+      const modal = document.getElementById('settingsModal');
+      modal.style.display = 'block';
+      document.getElementById('old_password').value = '';
+      document.getElementById('new_password').value = '';
+      document.getElementById('new_nickname').value = '';
+    }
+
+    function closeSettingsModal() {
+      const modal = document.getElementById('settingsModal');
+      modal.style.display = 'none';
+    }
+
+    async function changePassword() {
+      const oldPassword = document.getElementById('old_password').value;
+      const newPassword = document.getElementById('new_password').value;
+
+      if (!oldPassword || !newPassword) {
+        showNotification('請輸入舊密碼和新密碼', false);
+        return;
+      }
+
+      if (newPassword.length < 6) {
+        showNotification('新密碼必須至少6個字元', false);
+        return;
+      }
+
+      try {
+        const response = await fetch('/change-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ oldPassword, newPassword }),
+          credentials: 'include'
+        });
+        const result = await response.json();
+        showNotification(result.message || result.error, !result.error);
+        if (!result.error) {
+          closeSettingsModal();
+          await logout();
+          showAuthModal();
+        }
+      } catch (error) {
+        console.error('Change password error:', error.message);
+        showNotification('更改密碼失敗：' + error.message, false);
+      }
+    }
+
+    async function updateNickname() {
+      const newNickname = document.getElementById('new_nickname').value.trim();
+
+      if (!newNickname) {
+        showNotification('請輸入新暱稱', false);
+        return;
+      }
+
+      const nicknameRegex = /^[a-zA-Z0-9_\u4e00-\u9fa5]{1,20}$/;
+      if (!nicknameRegex.test(newNickname)) {
+        showNotification('暱稱必須為1-20個字元，僅限字母、數字、底線或中文', false);
+        return;
+      }
+
+      try {
+        const response = await fetch('/update-nickname', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nickname: newNickname }),
+          credentials: 'include'
+        });
+        const result = await response.json();
+        showNotification(result.message || result.error, !result.error);
+        if (!result.error) {
+          localStorage.setItem('userNickname', newNickname);
+          document.getElementById('userNickname').textContent = newNickname;
+          closeSettingsModal();
+        }
+      } catch (error) {
+        console.error('Update nickname error:', error.message);
+        showNotification('更新暱稱失敗：' + error.message, false);
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      const sessionValid = await checkSession();
+      if (sessionValid) {
+        await Promise.all([
+          fetchInventory(),
+          fetchConsumption(),
+          fetchFoods(),
+          fetchCategoryCounts(),
+          fetchSavedImports(),
+          fetchPersistentImports()
+        ]);
+      }
+      setupFoodSearch('food', 'suggestions');
+      setupFoodSearch('edit_food', 'edit_suggestions');
+      setupFoodSearch('consume_food', 'consume_suggestions');
+      setupDateSearch('add_date', 'add_date_suggestions');
+      setupDateSearch('edit_date', 'edit_date_suggestions');
+      setDefaultDate();
+    });
+
+    window.onclick = function(event) {
+      const editModal = document.getElementById('editModal');
+      const authModal = document.getElementById('authModal');
+      const settingsModal = document.getElementById('settingsModal');
+      if (event.target == editModal) closeEditModal();
+      if (event.target == authModal) closeAuthModal();
+      if (event.target == settingsModal) closeSettingsModal();
+    };
+  </script>
+</body>
+</html>
